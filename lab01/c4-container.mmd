@@ -1,0 +1,38 @@
+%%{init: {"layout": "elk"}}%%
+flowchart LR
+  analyst["Analyst<br/>[Person]"]:::person
+  manager["Branch manager<br/>[Person]"]:::person
+  pos["Branch POS systems<br/>[External system, x3]"]:::external
+
+  subgraph boundary["Monthly Sales Report System"]
+    viewer["Desktop viewer<br/>[JavaFX]<br/>for analysts"]:::container
+    web["Web report page<br/>[Java 25 HTTP server, HTML]<br/>login, one branch per manager"]:::container
+    sftp["SFTP server<br/>[OpenSSH, SFTP]<br/>receives the daily files"]:::container
+    ingest["Ingest job<br/>[Java 25, batch]<br/>checks checksum, parses, validates rows"]:::container
+    batch["Report batch<br/>[Java 25, batch]<br/>engine + renderers (txt, html, csv)"]:::container
+    scheduler["Scheduler<br/>[cron / systemd timer]<br/>starts jobs, waits for late files"]:::container
+    landing[("Landing zone<br/>[file system, data/yyyy-MM/*.csv]<br/>raw and validated files")]:::store
+    store[("Report store<br/>[file system, versioned reports]<br/>report files and run log")]:::store
+  end
+
+  mail["E-mail service<br/>[External system]"]:::external
+
+  pos -- "uploads daily CSV [SFTP]" --> sftp
+  sftp -- "stores file [file system]" --> landing
+  scheduler -- "starts at 23:30 [process start]" --> ingest
+  ingest -- "validates, writes reject log [file system]" --> landing
+  scheduler -- "starts at 06:00 [process start]" --> batch
+  batch -- "reads validated files [file system]" --> landing
+  batch -- "writes report files [file system]" --> store
+  batch -- "sends report-ready message [SMTP]" --> mail
+  web -- "reads reports [file system]" --> store
+  viewer -- "fetches reports [HTTPS]" --> web
+  analyst -- "uses [JavaFX window]" --> viewer
+  analyst -- "views, exports [HTTPS]" --> web
+  manager -- "views own branch [HTTPS]" --> web
+
+  classDef person fill:#08427b,color:#ffffff,stroke:#052e56
+  classDef container fill:#438dd5,color:#ffffff,stroke:#2e6295
+  classDef store fill:#2f6fa8,color:#ffffff,stroke:#1f4d78
+  classDef external fill:#8a8a8a,color:#ffffff,stroke:#6b6b6b
+  style boundary fill:none,stroke:#444,stroke-dasharray: 5 5
